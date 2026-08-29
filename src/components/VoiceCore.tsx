@@ -15,21 +15,26 @@ export function VoiceCore() {
   // (toque brevíssimo) sempre encontra a ref preenchida — não existe mais a
   // janela em que terminar() via null e não tinha o que parar.
   const gravacao = useRef<Promise<Recording> | null>(null);
+  // Número do ciclo atual. terminar() zera gravacao.current assim que assume
+  // uma gravação, então não tem mais como comparar promessa pra saber se
+  // ainda é dono da tela quando sua transcrição volta — a geração resolve
+  // isso pra qualquer ciclo (comecar() ou terminar()) que precise checar se
+  // ainda é o mais recente antes de escrever estado de UI.
+  const geracao = useRef(0);
 
   async function comecar() {
     if (gravacao.current) return;
     setAviso(null);
+    const minha = ++geracao.current;
     const pendente = startRecording(setLevel);
     gravacao.current = pendente;
     setState("listening");
     try {
       await pendente;
     } catch (e) {
-      // terminar() pode já ter assumido essa promessa (gravacao.current virou
-      // null, ou até uma promessa mais nova de um terceiro toque) — só
-      // limpamos o que ainda é nosso, pra não pisar no estado de um ciclo
-      // mais novo já em andamento.
-      if (gravacao.current !== pendente) return;
+      // Um ciclo mais novo já pode ter assumido a tela — só limpamos o que
+      // ainda é nosso, pra não pisar no estado de quem já tomou posse.
+      if (geracao.current !== minha) return;
       gravacao.current = null;
       setState("idle");
       setLevel(0);
@@ -38,6 +43,7 @@ export function VoiceCore() {
   }
 
   async function terminar() {
+    const minha = geracao.current;
     const pendente = gravacao.current;
     if (!pendente) return;
     gravacao.current = null; // libera já: o próximo toque não fica travado
@@ -45,7 +51,7 @@ export function VoiceCore() {
 
     try {
       const gravador = await pendente; // espera o start terminar de abrir, qualquer que seja o tempo
-      const audio = await gravador.stop();
+      const audio = await gravador.stop(); // libera o microfone e fecha o AudioContext deste ciclo, sempre
       const texto = await transcribe(audio, loadSettings());
       if (texto) {
         window.dispatchEvent(new CustomEvent("spider:transcript", { detail: texto }));
@@ -53,15 +59,19 @@ export function VoiceCore() {
         setAviso("não entendi");
       }
     } catch (e) {
-      setAviso(e instanceof Error ? e.message : "falha ao transcrever");
+      // Idem: se um toque seguinte já começou outro ciclo (geracao.current
+      // mudou), este terminar() é de um ciclo abandonado — não escreve um
+      // aviso de erro falso por cima de uma gravação que está funcionando.
+      if (geracao.current === minha) {
+        setAviso(e instanceof Error ? e.message : "falha ao transcrever");
+      }
     } finally {
-      // ponytail: se um ciclo antigo (toque breve já solto) terminar de
-      // transcrever enquanto um ciclo mais novo já está gravando, este
-      // finally pode piscar o estado pra "idle" por um instante — cosmético,
-      // a gravação do ciclo novo continua rodando por trás. Resolve com um
-      // contador de geração se isso incomodar visualmente.
-      setState("idle");
-      setLevel(0);
+      // Mesma guarda, só pra escrita de estado de UI — a limpeza de hardware
+      // já aconteceu no stop() acima, incondicional, e não depende disto.
+      if (geracao.current === minha) {
+        setState("idle");
+        setLevel(0);
+      }
     }
   }
 
