@@ -13,8 +13,10 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+  --font-display: "Saira", ui-sans-serif, system-ui, sans-serif;
 
   --color-void: #0a0a0b;
+  --color-void-deep: #050506;
   --color-panel: #131315;
   --color-panel-raised: #19191c;
   --color-line: #232326;
@@ -22,6 +24,8 @@
   --color-red: #e8352f;
   --color-red-dim: #7a1f1b;
   --color-red-glow: #e8352f33;
+
+  --color-ember: #ff3b30;
 
   --color-ink: #ededec;
   --color-ink-muted: #6b6b70;
@@ -35,7 +39,7 @@
 }
 
 body {
-  background: var(--color-void);
+  background: var(--color-void-deep);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -85,5 +89,16 @@ body {
     var(--color-red) 0%,
     var(--color-red-dim) 40%,
     transparent 100%
+  );
+}
+
+/* O vermelho da referência só funciona porque o entorno é vazio. A vinheta
+   escurece as bordas e faz o centro parecer iluminado sem custar uma única
+   camada de blur. */
+.hud-vignette {
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 40%,
+    #0e0e11 0%,
+    var(--color-void-deep) 70%
   );
 }
