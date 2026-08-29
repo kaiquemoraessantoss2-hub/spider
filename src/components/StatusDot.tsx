@@ -14,7 +14,7 @@ export function StatusDot({ tone, label }: { tone: Tone; label: string }) {
         className={`h-1.5 w-1.5 rounded-full ${TONE_COLOR[tone]}`}
         aria-hidden
       />
-      <span className="font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+      <span className="font-display text-[10px] uppercase tracking-[0.2em] text-ink-muted">
         {label}
       </span>
     </span>
