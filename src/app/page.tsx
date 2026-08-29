@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchProjects } from "@/lib/tauri";
 import { ProjectCard } from "@/components/ProjectCard";
+import { ChatPanel } from "@/components/ChatPanel";
 import { MicroLabel } from "@/components/hud/MicroLabel";
 import { overallTone } from "@/lib/status";
 
@@ -57,8 +58,7 @@ export default function Home() {
         </section>
 
         <aside className="flex flex-col overflow-hidden bg-void-deep">
-          {/* Placeholder até a Tarefa 8 criar o componente real. */}
-          <MicroLabel tone="faint">conversa</MicroLabel>
+          <ChatPanel projects={projects ?? []} />
         </aside>
       </div>
     </main>
