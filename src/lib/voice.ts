@@ -19,47 +19,60 @@ export async function startRecording(onLevel: (level: number) => void): Promise<
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
   const contexto = new AudioContext();
-  const analisador = contexto.createAnalyser();
-  analisador.fftSize = 256;
-  contexto.createMediaStreamSource(stream).connect(analisador);
-
-  const amostras = new Uint8Array(analisador.frequencyBinCount);
   let rodando = true;
 
-  function medir() {
-    if (!rodando) return;
-    analisador.getByteTimeDomainData(amostras);
-    let soma = 0;
-    for (const amostra of amostras) {
-      const desvio = (amostra - 128) / 128;
-      soma += desvio * desvio;
+  // Tudo daqui pra baixo pode falhar (MediaRecorder sem suporte ao mimeType,
+  // por exemplo) depois que o microfone já foi aberto. Sem o try/catch, uma
+  // falha aqui deixa a stream aberta, o AudioContext sem fechar e o loop de
+  // medir() rodando pra sempre — ninguém chama stop() de um Recording que
+  // nunca chegou a existir.
+  try {
+    const analisador = contexto.createAnalyser();
+    analisador.fftSize = 256;
+    contexto.createMediaStreamSource(stream).connect(analisador);
+
+    const amostras = new Uint8Array(analisador.frequencyBinCount);
+
+    function medir() {
+      if (!rodando) return;
+      analisador.getByteTimeDomainData(amostras);
+      let soma = 0;
+      for (const amostra of amostras) {
+        const desvio = (amostra - 128) / 128;
+        soma += desvio * desvio;
+      }
+      onLevel(Math.min(1, Math.sqrt(soma / amostras.length) * 4));
+      requestAnimationFrame(medir);
     }
-    onLevel(Math.min(1, Math.sqrt(soma / amostras.length) * 4));
-    requestAnimationFrame(medir);
+    medir();
+
+    const gravador = new MediaRecorder(stream, { mimeType: "audio/webm" });
+    const pedacos: Blob[] = [];
+    gravador.ondataavailable = (e) => {
+      if (e.data.size > 0) pedacos.push(e.data);
+    };
+    gravador.start();
+
+    return {
+      stop() {
+        return new Promise<Blob>((resolve) => {
+          gravador.onstop = () => {
+            rodando = false;
+            onLevel(0);
+            stream.getTracks().forEach((t) => t.stop());
+            void contexto.close();
+            resolve(new Blob(pedacos, { type: "audio/webm" }));
+          };
+          gravador.stop();
+        });
+      },
+    };
+  } catch (e) {
+    rodando = false;
+    stream.getTracks().forEach((t) => t.stop());
+    void contexto.close();
+    throw e;
   }
-  medir();
-
-  const gravador = new MediaRecorder(stream, { mimeType: "audio/webm" });
-  const pedacos: Blob[] = [];
-  gravador.ondataavailable = (e) => {
-    if (e.data.size > 0) pedacos.push(e.data);
-  };
-  gravador.start();
-
-  return {
-    stop() {
-      return new Promise<Blob>((resolve) => {
-        gravador.onstop = () => {
-          rodando = false;
-          onLevel(0);
-          stream.getTracks().forEach((t) => t.stop());
-          void contexto.close();
-          resolve(new Blob(pedacos, { type: "audio/webm" }));
-        };
-        gravador.stop();
-      });
-    },
-  };
 }
 
 export async function transcribe(audio: Blob, settings: Settings): Promise<string> {
