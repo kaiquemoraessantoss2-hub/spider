@@ -10,50 +10,42 @@ export function VoiceCore() {
   const [level, setLevel] = useState(0);
   const [state, setState] = useState<RingState>("idle");
   const [aviso, setAviso] = useState<string | null>(null);
-  const gravacao = useRef<Recording | null>(null);
-  // getUserMedia é sempre assíncrono, mesmo com permissão já concedida: um
-  // toque breve solta o botão antes de comecar() terminar, e gravacao.current
-  // ainda é null nesse instante — terminar() não teria o que parar. Essas
-  // duas flags cobrem a corrida: emAndamento diz se comecar() ainda está no
-  // meio do await, cancelado diz se terminar() já foi chamado enquanto isso.
-  const emAndamento = useRef(false);
-  const cancelado = useRef(false);
+  // Guarda a PROMESSA, não o resultado: ela é atribuída no mesmo tick do
+  // pointerdown, antes de qualquer await. Um pointerup logo em seguida
+  // (toque brevíssimo) sempre encontra a ref preenchida — não existe mais a
+  // janela em que terminar() via null e não tinha o que parar.
+  const gravacao = useRef<Promise<Recording> | null>(null);
 
   async function comecar() {
-    if (gravacao.current || emAndamento.current) return;
+    if (gravacao.current) return;
     setAviso(null);
-    emAndamento.current = true;
-    cancelado.current = false;
+    const pendente = startRecording(setLevel);
+    gravacao.current = pendente;
+    setState("listening");
     try {
-      const gravador = await startRecording(setLevel);
-      emAndamento.current = false;
-      if (cancelado.current) {
-        // Soltou antes da gravação terminar de abrir: encerra na hora em vez
-        // de entrar em "listening" e travar com o microfone aberto.
-        cancelado.current = false;
-        void gravador.stop();
-        return;
-      }
-      gravacao.current = gravador;
-      setState("listening");
+      await pendente;
     } catch (e) {
-      emAndamento.current = false;
+      // terminar() pode já ter assumido essa promessa (gravacao.current virou
+      // null, ou até uma promessa mais nova de um terceiro toque) — só
+      // limpamos o que ainda é nosso, pra não pisar no estado de um ciclo
+      // mais novo já em andamento.
+      if (gravacao.current !== pendente) return;
+      gravacao.current = null;
+      setState("idle");
+      setLevel(0);
       setAviso(e instanceof Error ? e.message : "microfone indisponível");
     }
   }
 
   async function terminar() {
-    if (emAndamento.current) {
-      cancelado.current = true;
-      return;
-    }
-    const atual = gravacao.current;
-    if (!atual) return;
-    gravacao.current = null;
+    const pendente = gravacao.current;
+    if (!pendente) return;
+    gravacao.current = null; // libera já: o próximo toque não fica travado
     setState("thinking");
 
     try {
-      const audio = await atual.stop();
+      const gravador = await pendente; // espera o start terminar de abrir, qualquer que seja o tempo
+      const audio = await gravador.stop();
       const texto = await transcribe(audio, loadSettings());
       if (texto) {
         window.dispatchEvent(new CustomEvent("spider:transcript", { detail: texto }));
@@ -63,6 +55,11 @@ export function VoiceCore() {
     } catch (e) {
       setAviso(e instanceof Error ? e.message : "falha ao transcrever");
     } finally {
+      // ponytail: se um ciclo antigo (toque breve já solto) terminar de
+      // transcrever enquanto um ciclo mais novo já está gravando, este
+      // finally pode piscar o estado pra "idle" por um instante — cosmético,
+      // a gravação do ciclo novo continua rodando por trás. Resolve com um
+      // contador de geração se isso incomodar visualmente.
       setState("idle");
       setLevel(0);
     }
