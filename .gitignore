@@ -5,6 +5,7 @@ next-env.d.ts
 src-tauri/target/
 src-tauri/gen/
 .DS_Store
+tsconfig.tsbuildinfo
 
 .superpowers/
 icon-src.png

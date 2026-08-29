@@ -5,6 +5,8 @@ export interface Settings {
   model: string;
   /** Uma key por provider — trocar de provider não apaga a outra. */
   keys: Record<ProviderId, string>;
+  /** Key do Groq, usada só pelo ASR (voz) — separada das keys de chat acima. */
+  groqKey: string;
 }
 
 const STORAGE_KEY = "spider.settings.v1";
@@ -13,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   provider: "openrouter",
   model: "deepseek/deepseek-chat-v3.1:free",
   keys: { openrouter: "", nvidia: "" },
+  groqKey: "",
 };
 
 /**
@@ -31,6 +34,7 @@ export function loadSettings(): Settings {
       provider: parsed.provider ?? DEFAULT_SETTINGS.provider,
       model: parsed.model ?? DEFAULT_SETTINGS.model,
       keys: { ...DEFAULT_SETTINGS.keys, ...parsed.keys },
+      groqKey: parsed.groqKey ?? DEFAULT_SETTINGS.groqKey,
     };
   } catch {
     // localStorage indisponível ou JSON corrompido: seguir com o padrão é

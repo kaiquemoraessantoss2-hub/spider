@@ -5,6 +5,7 @@ import { fetchProjects } from "@/lib/tauri";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ChatPanel } from "@/components/ChatPanel";
 import { MicroLabel } from "@/components/hud/MicroLabel";
+import { VoiceCore } from "@/components/VoiceCore";
 import { overallTone } from "@/lib/status";
 
 export default function Home() {
@@ -53,8 +54,7 @@ export default function Home() {
         {/* O core some abaixo de 1100px: em janela estreita ele roubaria o
             espaço de quem manda, que é o dado. */}
         <section className="hidden items-center justify-center bg-void-deep min-[1100px]:flex">
-          {/* Placeholder até a Tarefa 9 criar o componente real. */}
-          <MicroLabel tone="faint">core de voz</MicroLabel>
+          <VoiceCore />
         </section>
 
         <aside className="flex flex-col overflow-hidden bg-void-deep">

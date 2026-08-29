@@ -68,6 +68,20 @@ export function SettingsDialog({ onClose }: { onClose: (s: Settings) => void }) 
           </span>
         </label>
 
+        <label className="mb-4 block">
+          <MicroLabel>key do Groq (voz)</MicroLabel>
+          <input
+            type="password"
+            value={settings.groqKey}
+            onChange={(e) => setSettings({ ...settings, groqKey: e.target.value })}
+            className="mt-1 w-full border border-line bg-panel px-2 py-1.5 font-mono text-xs text-ink"
+            placeholder="gsk_..."
+          />
+          <span className="mt-1 block text-[10px] text-ink-faint">
+            usada só para transcrever sua fala
+          </span>
+        </label>
+
         <button
           type="button"
           onClick={() => {
