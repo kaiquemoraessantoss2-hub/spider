@@ -1,0 +1,10 @@
+node_modules/
+.next/
+dist/
+next-env.d.ts
+src-tauri/target/
+src-tauri/gen/
+.DS_Store
+
+.superpowers/
+icon-src.png
