@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PROVIDERS } from "@/lib/llm";
+import { PROVIDERS, listarModelosGratuitos } from "@/lib/llm";
 import { ASR_PROVIDERS, OPENROUTER_ASR_MODELS } from "@/lib/voice";
 import { testarTudo, type Diagnostico } from "@/lib/diagnostics";
 import {
@@ -21,7 +21,21 @@ import { MicroLabel } from "@/components/hud/MicroLabel";
 export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void }) {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [diagnosticos, setDiagnosticos] = useState<Diagnostico[] | null>(null);
+  const [gratuitos, setGratuitos] = useState<string[]>([]);
   const [testando, setTestando] = useState(false);
+
+  // Busca o catálogo vivo em vez de confiar na lista embutida: modelo
+  // gratuito é removido do OpenRouter sem aviso, e um id morto vira 404.
+  useEffect(() => {
+    if (settings.provider !== "openrouter") return;
+    let ativo = true;
+    void listarModelosGratuitos().then((ids) => {
+      if (ativo) setGratuitos(ids);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [settings.provider]);
 
   async function testar() {
     setTestando(true);
@@ -76,13 +90,27 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
         </label>
 
         <label className="mb-3 block">
-          <MicroLabel>modelo</MicroLabel>
+          <MicroLabel>
+            modelo
+            {settings.provider === "openrouter" && gratuitos.length
+              ? ` · ${gratuitos.length} gratuitos no catálogo`
+              : ""}
+          </MicroLabel>
           <select
             value={settings.model}
             onChange={(e) => setSettings({ ...settings, model: e.target.value })}
             className="mt-1 w-full border border-line bg-panel px-2 py-1.5 font-mono text-xs text-ink"
           >
-            {provider.models.map((m) => (
+            {/* O modelo salvo entra na lista mesmo se não estiver no catálogo,
+                senão o select trocaria a escolha do usuário sozinho. */}
+            {Array.from(
+              new Set([
+                settings.model,
+                ...(settings.provider === "openrouter" && gratuitos.length
+                  ? gratuitos
+                  : provider.models),
+              ]),
+            ).map((m) => (
               <option key={m} value={m}>
                 {m}
               </option>

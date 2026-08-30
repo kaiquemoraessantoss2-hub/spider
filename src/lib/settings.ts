@@ -25,7 +25,7 @@ const STORAGE_KEY = "spider.settings.v1";
 
 export const DEFAULT_SETTINGS: Settings = {
   provider: "openrouter",
-  model: "deepseek/deepseek-chat-v3.1:free",
+  model: "openrouter/free",
   keys: { openrouter: "", nvidia: "" },
   asrProvider: "elevenlabs",
   asrKeys: { openrouter: "", elevenlabs: "" },
@@ -56,7 +56,13 @@ export function loadSettings(): Settings {
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return {
       provider: isProviderId(parsed.provider) ? parsed.provider : DEFAULT_SETTINGS.provider,
-      model: parsed.model ?? DEFAULT_SETTINGS.model,
+      // O padrão antigo saiu do catálogo do OpenRouter e passou a responder
+      // 404. Quem tinha ele salvo volta para o roteador de gratuitos em vez
+      // de descobrir sozinho que o modelo morreu.
+      model:
+        !parsed.model || parsed.model === "deepseek/deepseek-chat-v3.1:free"
+          ? DEFAULT_SETTINGS.model
+          : parsed.model,
       keys: { ...DEFAULT_SETTINGS.keys, ...parsed.keys },
       asrProvider: isAsrProviderId(parsed.asrProvider)
         ? parsed.asrProvider

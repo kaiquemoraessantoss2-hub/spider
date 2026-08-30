@@ -15,12 +15,11 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
   openrouter: {
     label: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1",
-    models: [
-      "deepseek/deepseek-chat-v3.1:free",
-      "meta-llama/llama-3.3-70b-instruct:free",
-      "qwen/qwen3-235b-a22b:free",
-      "google/gemma-3-27b-it:free",
-    ],
+    // Rede de segurança para quando o catálogo não puder ser buscado. O
+    // roteador vem primeiro de propósito: modelo gratuito individual sai do
+    // ar sem aviso (o padrão anterior, deepseek-chat-v3.1:free, sumiu do
+    // catálogo em dias), e o roteador escolhe entre os que existirem.
+    models: ["openrouter/free"],
   },
   nvidia: {
     label: "NVIDIA NIM",
@@ -133,5 +132,38 @@ export async function* streamChat(
     // timer pendente precisa morrer junto, senão o silencio.abort() de um
     // stream que já terminou dispara em cima do nada.
     clearTimeout(timer);
+  }
+}
+
+/**
+ * Lista os modelos de texto sem custo direto do catálogo do OpenRouter.
+ * A lista fixa não se sustenta: modelo gratuito é removido e renomeado o
+ * tempo todo, e um id morto vira 404 na cara de quem só queria perguntar
+ * alguma coisa. Devolve vazio em qualquer falha — quem chama decide o
+ * fallback, e ficar sem catálogo não pode impedir de abrir as configurações.
+ */
+export async function listarModelosGratuitos(): Promise<string[]> {
+  try {
+    const r = await fetch(`${PROVIDERS.openrouter.baseUrl}/models`);
+    if (!r.ok) return [];
+    const { data } = (await r.json()) as {
+      data?: {
+        id: string;
+        context_length?: number;
+        pricing?: { prompt?: string; completion?: string };
+        architecture?: { output_modalities?: string[] };
+      }[];
+    };
+    return (data ?? [])
+      .filter(
+        (m) =>
+          (m.architecture?.output_modalities ?? []).includes("text") &&
+          Number(m.pricing?.prompt) === 0 &&
+          Number(m.pricing?.completion) === 0,
+      )
+      .sort((a, b) => (b.context_length ?? 0) - (a.context_length ?? 0))
+      .map((m) => m.id);
+  } catch {
+    return [];
   }
 }
