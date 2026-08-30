@@ -1,3 +1,5 @@
+import { PROVIDERS } from "./llm.ts";
+
 export type ProviderId = "openrouter" | "nvidia";
 
 export interface Settings {
@@ -18,6 +20,12 @@ export const DEFAULT_SETTINGS: Settings = {
   groqKey: "",
 };
 
+/** JSON.parse não garante que o valor bata com o enum — localStorage pode
+ * ter sido escrito por uma versão antiga/futura do app. */
+function isProviderId(value: unknown): value is ProviderId {
+  return typeof value === "string" && value in PROVIDERS;
+}
+
 /**
  * A key vive em texto puro no localStorage do WebView2 (%LOCALAPPDATA%).
  * Decisão consciente do spec: app local, single-user, key de tier gratuito.
@@ -31,7 +39,7 @@ export function loadSettings(): Settings {
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<Settings>;
     return {
-      provider: parsed.provider ?? DEFAULT_SETTINGS.provider,
+      provider: isProviderId(parsed.provider) ? parsed.provider : DEFAULT_SETTINGS.provider,
       model: parsed.model ?? DEFAULT_SETTINGS.model,
       keys: { ...DEFAULT_SETTINGS.keys, ...parsed.keys },
       groqKey: parsed.groqKey ?? DEFAULT_SETTINGS.groqKey,
