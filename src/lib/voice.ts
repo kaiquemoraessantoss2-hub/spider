@@ -21,7 +21,11 @@ export const ASR_PROVIDERS: Record<AsrProviderId, { label: string; ajuda: string
 
 const OPENROUTER_ASR_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
 const ELEVENLABS_ASR_URL = "https://api.elevenlabs.io/v1/speech-to-text";
-const ELEVENLABS_MODEL = "scribe_v1";
+// A doc atual só documenta scribe_v2; contas antigas ainda aceitam scribe_v1.
+// Tentamos o novo e caímos no antigo se o provedor recusar o id — evita que
+// a voz morra por causa de um nome de modelo, que é justamente o erro que já
+// nos custou duas idas e vindas.
+const ELEVENLABS_MODELS = ["scribe_v2", "scribe_v1"];
 
 /** Sugestões de STT do OpenRouter, das mais baratas às mais caras. A lista
  *  completa sai de `/api/v1/models?output_modalities=transcription` — todos
@@ -122,6 +126,18 @@ export async function startRecording(onLevel: (level: number) => void): Promise<
   }
 }
 
+async function pedirTranscricao(
+  url: string,
+  headers: Record<string, string>,
+  campos: Record<string, string>,
+  audio: Blob,
+): Promise<Response> {
+  const form = new FormData();
+  form.append("file", audio, "fala.webm");
+  for (const [k, v] of Object.entries(campos)) form.append(k, v);
+  return fetch(url, { method: "POST", headers, body: form });
+}
+
 export async function transcribe(audio: Blob, settings: Settings): Promise<string> {
   const provedor = settings.asrProvider;
   const key = settings.asrKeys[provedor];
@@ -129,29 +145,44 @@ export async function transcribe(audio: Blob, settings: Settings): Promise<strin
     throw new Error(`configure a key de ${ASR_PROVIDERS[provedor].label} para usar a voz`);
   }
 
-  const form = new FormData();
-  form.append("file", audio, "fala.webm");
-
-  let url: string;
-  let headers: Record<string, string>;
+  let resposta: Response;
 
   if (provedor === "elevenlabs") {
-    url = ELEVENLABS_ASR_URL;
-    // A ElevenLabs autentica por header próprio, não por Bearer.
-    headers = { "xi-api-key": key };
-    form.append("model_id", ELEVENLABS_MODEL);
-    // ISO-639-3. Dizer o idioma poupa a etapa de detecção e erra menos em
-    // áudio curto, que é o caso de uso aqui (um comando de poucos segundos).
-    form.append("language_code", "por");
+    // A ElevenLabs autentica por header próprio, não por Bearer. O
+    // language_code em ISO-639-3 poupa a detecção de idioma e erra menos em
+    // áudio curto, que é o caso aqui (um comando de poucos segundos).
+    const headers = { "xi-api-key": key };
+    resposta = await pedirTranscricao(ELEVENLABS_ASR_URL, headers, {
+      model_id: ELEVENLABS_MODELS[0]!,
+      language_code: "por",
+    }, audio);
+
+    if (!resposta.ok && resposta.status < 500) {
+      const corpo = await resposta.clone().text().catch(() => "");
+      if (/model/i.test(corpo)) {
+        resposta = await pedirTranscricao(ELEVENLABS_ASR_URL, headers, {
+          model_id: ELEVENLABS_MODELS[1]!,
+          language_code: "por",
+        }, audio);
+      }
+    }
   } else {
-    url = OPENROUTER_ASR_URL;
-    headers = { Authorization: `Bearer ${key}` };
-    form.append("model", settings.asrModel);
+    resposta = await pedirTranscricao(
+      OPENROUTER_ASR_URL,
+      { Authorization: `Bearer ${key}` },
+      { model: settings.asrModel },
+      audio,
+    );
   }
 
-  const resposta = await fetch(url, { method: "POST", headers, body: form });
-
   if (!resposta.ok) {
+    // 402 no OpenRouter é sempre a mesma história: transcrição lá é paga e
+    // nenhum modelo é :free. Dizer isso é mais útil do que repassar o JSON.
+    if (provedor === "openrouter" && resposta.status === 402) {
+      throw new Error(
+        "o OpenRouter cobra por transcrição e exige saldo. Troque \"quem transcreve a fala\" para ElevenLabs nas configurações, ou adicione crédito.",
+      );
+    }
     // O corpo do erro costuma dizer o que o provedor não aceitou (modelo
     // inexistente, cota estourada). Sem ele, o usuário só vê um número.
     const detalhe = await resposta.text().catch(() => "");
