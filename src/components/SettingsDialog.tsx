@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PROVIDERS } from "@/lib/llm";
 import { ASR_PROVIDERS, OPENROUTER_ASR_MODELS } from "@/lib/voice";
+import { testarTudo, type Diagnostico } from "@/lib/diagnostics";
 import {
   loadSettings,
   saveSettings,
@@ -19,6 +20,20 @@ import { MicroLabel } from "@/components/hud/MicroLabel";
  */
 export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void }) {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
+  const [diagnosticos, setDiagnosticos] = useState<Diagnostico[] | null>(null);
+  const [testando, setTestando] = useState(false);
+
+  async function testar() {
+    setTestando(true);
+    setDiagnosticos(null);
+    try {
+      // Testa com o que está na tela, não com o que está salvo — assim dá
+      // pra validar uma key nova antes de gravá-la.
+      setDiagnosticos(await testarTudo(settings));
+    } finally {
+      setTestando(false);
+    }
+  }
   const provider = PROVIDERS[settings.provider];
 
   useEffect(() => {
@@ -154,6 +169,32 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
             usada só para transcrever sua fala
           </span>
         </label>
+
+        <div className="mb-4 border-t border-line pt-3">
+          <button
+            type="button"
+            onClick={() => void testar()}
+            disabled={testando}
+            className="w-full border border-line px-3 py-1.5 font-display text-[10px] uppercase tracking-[0.25em] text-ink-muted hover:border-red hover:text-red disabled:opacity-50"
+          >
+            {testando ? "testando…" : "testar conexões"}
+          </button>
+
+          {diagnosticos?.map((d) => (
+            <div key={d.alvo} className="mt-2">
+              <div className="flex items-baseline gap-2">
+                <span
+                  className={`h-1.5 w-1.5 shrink-0 rounded-full ${d.ok ? "bg-ok" : "bg-danger"}`}
+                  aria-hidden
+                />
+                <MicroLabel>{d.alvo}</MicroLabel>
+              </div>
+              <p className="ml-3.5 break-all font-mono text-[10px] leading-snug text-ink-muted">
+                {d.detalhe}
+              </p>
+            </div>
+          ))}
+        </div>
 
         <div className="flex gap-2">
           <button

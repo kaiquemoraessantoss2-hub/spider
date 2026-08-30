@@ -30,11 +30,19 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     fimDaLista.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // A Tarefa 9 despacha este evento quando termina de transcrever.
+  // O listener é registrado uma vez só, mas `enviar` fecha sobre estado que
+  // muda a cada render (settings, messages, streaming). Sem a ref, a fala
+  // seria enviada com um retrato velho da conversa.
+  const enviarRef = useRef(enviar);
+  enviarRef.current = enviar;
+
+  // Fecha o ciclo de voz: o VoiceCore despacha o texto transcrito e a
+  // pergunta vai embora sozinha. Encher o campo e esperar um Enter fazia a
+  // tela parecer morta pra quem acabou de falar.
   useEffect(() => {
     function receber(e: Event) {
       const texto = (e as CustomEvent<string>).detail;
-      if (texto) setInput((atual) => (atual ? `${atual} ${texto}` : texto));
+      if (texto) void enviarRef.current(texto, true);
     }
     window.addEventListener(TRANSCRIPT_EVENT, receber);
     return () => window.removeEventListener(TRANSCRIPT_EVENT, receber);
@@ -51,8 +59,8 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     setErro(null);
   }
 
-  async function enviar() {
-    const pergunta = input.trim();
+  async function enviar(texto: string, porVoz = false) {
+    const pergunta = texto.trim();
     if (!pergunta || streaming || !settings) return;
 
     setInput("");
@@ -88,7 +96,9 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
       }
       // Fala uma vez só, com a resposta completa — chamar speak() a cada
       // pedaço do streaming corta a fala no WebView2 a cada token.
-      if (falar && completa) speak(completa);
+      // Pergunta feita por voz é respondida por voz, mesmo com o
+      // interruptor desligado: quem falou não está olhando pra tela.
+      if ((falar || porVoz) && completa) speak(completa);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // Cancelamento intencional ("nova conversa") — não é erro pra mostrar.
@@ -167,7 +177,7 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              void enviar();
+              void enviar(input);
             }
           }}
           rows={2}
