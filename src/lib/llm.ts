@@ -45,6 +45,9 @@ export class MissingKeyError extends Error {
   }
 }
 
+/** Acima disso, um stream travado (wifi caindo no meio) é abortado sozinho. */
+const TIMEOUT_MS = 30_000;
+
 /**
  * Streama a resposta em pedaços de texto. OpenRouter e NVIDIA NIM expõem o
  * mesmo `/chat/completions`, então o provider é só baseUrl + key + modelo.
@@ -58,9 +61,14 @@ export async function* streamChat(
   const key = settings.keys[settings.provider];
   if (!key) throw new MissingKeyError(settings.provider);
 
+  // Combina o cancelamento vindo da UI com um teto de tempo: sem isso, uma
+  // conexão que trava no meio do stream (wifi caindo) nunca chama abort() e
+  // reader.read() fica pendurado pra sempre.
+  const combinedSignal = AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]);
+
   const response = await fetch(`${provider.baseUrl}/chat/completions`, {
     method: "POST",
-    signal,
+    signal: combinedSignal,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
