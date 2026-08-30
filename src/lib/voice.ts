@@ -11,7 +11,7 @@ export interface Recording {
 export const ASR_PROVIDERS: Record<AsrProviderId, { label: string; ajuda: string }> = {
   openrouter: {
     label: "OpenRouter",
-    ajuda: "mesma key do chat; o id do modelo é campo livre",
+    ajuda: "mesma key do chat, mas transcrição no OpenRouter é paga (nenhum modelo :free)",
   },
   elevenlabs: {
     label: "ElevenLabs Scribe",
@@ -22,6 +22,17 @@ export const ASR_PROVIDERS: Record<AsrProviderId, { label: string; ajuda: string
 const OPENROUTER_ASR_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
 const ELEVENLABS_ASR_URL = "https://api.elevenlabs.io/v1/speech-to-text";
 const ELEVENLABS_MODEL = "scribe_v1";
+
+/** Sugestões de STT do OpenRouter, das mais baratas às mais caras. A lista
+ *  completa sai de `/api/v1/models?output_modalities=transcription` — todos
+ *  são pagos, o que é justamente a razão do ElevenLabs ser o padrão. */
+export const OPENROUTER_ASR_MODELS = [
+  "openai/gpt-4o-mini-transcribe",
+  "openai/whisper-large-v3-turbo",
+  "qwen/qwen3-asr-0.6b",
+  "nvidia/parakeet-tdt-0.6b-v3",
+  "deepgram/nova-3",
+];
 
 /** Nome do CustomEvent que carrega o texto transcrito até o ChatPanel. */
 export const TRANSCRIPT_EVENT = "spider:transcript";

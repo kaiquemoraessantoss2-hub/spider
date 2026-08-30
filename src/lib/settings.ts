@@ -15,8 +15,9 @@ export interface Settings {
   asrProvider: AsrProviderId;
   /** Uma key por provedor de transcrição, pela mesma razão das de chat. */
   asrKeys: Record<AsrProviderId, string>;
-  /** Id do modelo de transcrição no OpenRouter. É campo livre porque o
-   *  catálogo de áudio deles não aparece na listagem pública de modelos. */
+  /** Id do modelo de transcrição no OpenRouter. Campo livre: o catálogo de
+   *  STT só aparece filtrando `?output_modalities=transcription`, então
+   *  sugerimos alguns e deixamos o resto por conta de quem quiser trocar. */
   asrModel: string;
 }
 
@@ -28,7 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
   keys: { openrouter: "", nvidia: "" },
   asrProvider: "elevenlabs",
   asrKeys: { openrouter: "", elevenlabs: "" },
-  asrModel: "deepgram/flux",
+  asrModel: "openai/whisper-large-v3-turbo",
 };
 
 /** JSON.parse não garante que o valor bata com o enum — localStorage pode
@@ -61,7 +62,13 @@ export function loadSettings(): Settings {
         ? parsed.asrProvider
         : DEFAULT_SETTINGS.asrProvider,
       asrKeys: { ...DEFAULT_SETTINGS.asrKeys, ...parsed.asrKeys },
-      asrModel: parsed.asrModel ?? DEFAULT_SETTINGS.asrModel,
+      // "deepgram/flux" foi um padrão errado de uma versão anterior: é modelo
+      // de SÍNTESE de fala, e a rota de transcrição responde 400 com ele.
+      // Quem já salvou esse valor volta pro padrão em vez de ficar quebrado.
+      asrModel:
+        !parsed.asrModel || parsed.asrModel === "deepgram/flux"
+          ? DEFAULT_SETTINGS.asrModel
+          : parsed.asrModel,
     };
   } catch {
     // localStorage indisponível ou JSON corrompido: seguir com o padrão é

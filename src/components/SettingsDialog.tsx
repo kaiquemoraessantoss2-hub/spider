@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PROVIDERS } from "@/lib/llm";
-import { ASR_PROVIDERS } from "@/lib/voice";
+import { ASR_PROVIDERS, OPENROUTER_ASR_MODELS } from "@/lib/voice";
 import {
   loadSettings,
   saveSettings,
@@ -119,11 +119,20 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
             <MicroLabel>modelo de transcrição</MicroLabel>
             <input
               type="text"
+              list="modelos-de-transcricao"
               value={settings.asrModel}
               onChange={(e) => setSettings({ ...settings, asrModel: e.target.value })}
               className="mt-1 w-full border border-line bg-panel px-2 py-1.5 font-mono text-xs text-ink"
-              placeholder="deepgram/flux"
+              placeholder="openai/whisper-large-v3-turbo"
             />
+            <datalist id="modelos-de-transcricao">
+              {OPENROUTER_ASR_MODELS.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
+            <span className="mt-1 block text-[10px] text-ink-faint">
+              precisa de crédito na conta — não há modelo de transcrição gratuito
+            </span>
           </label>
         )}
 
