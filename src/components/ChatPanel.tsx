@@ -15,7 +15,7 @@ import {
   type Conversa,
 } from "@/lib/conversas";
 import { buildSystemPrompt } from "@/lib/context";
-import { speak, calar, TRANSCRIPT_EVENT } from "@/lib/voice";
+import { speak, calar, TRANSCRIPT_EVENT, STREAMING_EVENT } from "@/lib/voice";
 import { MicroLabel } from "@/components/hud/MicroLabel";
 import { SettingsDialog } from "@/components/SettingsDialog";
 
@@ -65,6 +65,10 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   useEffect(() => {
     fimDaLista.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(STREAMING_EVENT, { detail: streaming }));
+  }, [streaming]);
 
   // O listener é registrado uma vez só, mas `enviar` fecha sobre estado que
   // muda a cada render (settings, messages, streaming). Sem a ref, a fala

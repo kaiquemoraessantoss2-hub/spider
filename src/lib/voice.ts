@@ -41,6 +41,11 @@ export const OPENROUTER_ASR_MODELS = [
 /** Nome do CustomEvent que carrega o texto transcrito até o ChatPanel. */
 export const TRANSCRIPT_EVENT = "spider:transcript";
 
+/** Avisa o core que uma resposta está sendo escrita, para ele pulsar. O
+ *  ChatPanel e o VoiceCore são irmãos na árvore; um evento de window custa
+ *  menos que subir esse estado até a página só para descer de novo. */
+export const STREAMING_EVENT = "spider:streaming";
+
 /**
  * Grava do microfone e reporta o nível de volume em tempo real (0..1) — é
  * isso que faz o anel do core respirar enquanto se fala.

@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Ring, type RingState } from "@/components/hud/Ring";
 import { MicroLabel } from "@/components/hud/MicroLabel";
-import { startRecording, transcribe, TRANSCRIPT_EVENT, type Recording } from "@/lib/voice";
+import {
+  startRecording,
+  transcribe,
+  TRANSCRIPT_EVENT,
+  STREAMING_EVENT,
+  type Recording,
+} from "@/lib/voice";
 import { loadSettings } from "@/lib/settings";
 
 export function VoiceCore({ size = 280 }: { size?: number }) {
@@ -24,6 +30,34 @@ export function VoiceCore({ size = 280 }: { size?: number }) {
   // isso pra qualquer ciclo (comecar() ou terminar()) que precise checar se
   // ainda é o mais recente antes de escrever estado de UI.
   const geracao = useRef(0);
+  const [respondendo, setRespondendo] = useState(false);
+  const [inclinacao, setInclinacao] = useState({ x: 0, y: 0 });
+
+  // O core pulsa enquanto a resposta é escrita. Sem isso, o único sinal de
+  // que ele está trabalhando é o cursor piscando lá no painel de texto.
+  useEffect(() => {
+    function ouvir(e: Event) {
+      setRespondendo(Boolean((e as CustomEvent<boolean>).detail));
+    }
+    window.addEventListener(STREAMING_EVENT, ouvir);
+    return () => window.removeEventListener(STREAMING_EVENT, ouvir);
+  }, []);
+
+  // Inclinação sutil seguindo o ponteiro: é o que faz o anel parecer um
+  // objeto num espaço, e não um desenho colado na tela. Amplitude pequena de
+  // propósito — passando de ~8 graus vira enjoo, não profundidade.
+  useEffect(() => {
+    if (compacto) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    function mover(e: PointerEvent) {
+      setInclinacao({
+        x: (e.clientY / window.innerHeight - 0.5) * -8,
+        y: (e.clientX / window.innerWidth - 0.5) * 8,
+      });
+    }
+    window.addEventListener("pointermove", mover);
+    return () => window.removeEventListener("pointermove", mover);
+  }, [compacto]);
 
   async function comecar() {
     if (gravacao.current) return;
@@ -107,7 +141,18 @@ export function VoiceCore({ size = 280 }: { size?: number }) {
         title={aviso ?? undefined}
         className="relative rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-red"
       >
-        <Ring level={level} state={state} size={size} />
+        <div
+          style={{
+            // A perspectiva mora no filho e não no pai porque o pai é um
+            // botão: aplicar transform 3D nele quebraria o anel de foco.
+            perspective: 900,
+            transform: `rotateX(${inclinacao.x}deg) rotateY(${inclinacao.y}deg)`,
+            transition: "transform 220ms cubic-bezier(0.16, 1, 0.3, 1)",
+            transformStyle: "preserve-3d",
+          }}
+        >
+          <Ring level={level} state={state === "idle" && respondendo ? "thinking" : state} size={size} />
+        </div>
         {/* No core compacto do header (960–1099px) a label e o parágrafo de
             aviso somem — sem isso uma falha de microfone não dava feedback
             nenhum. O title/aria-label acima cobre teclado e leitor de tela;
@@ -124,6 +169,8 @@ export function VoiceCore({ size = 280 }: { size?: number }) {
         <MicroLabel tone={state === "idle" ? "faint" : "ember"}>
           {state === "listening"
             ? "ouvindo"
+            : respondendo && state === "idle"
+            ? "respondendo"
             : state === "thinking"
               ? "transcrevendo"
               : "segure para falar"}

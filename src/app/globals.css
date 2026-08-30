@@ -40,7 +40,10 @@
 }
 
 body {
-  background: var(--color-void-deep);
+  /* A vinheta mora aqui, e não no <main>, para o campo de partículas poder
+     ficar entre o fundo e o conteúdo. Fundo no <main> taparia o canvas. */
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%, var(--color-void-lift) 0%, var(--color-void-deep) 70%);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -93,13 +96,33 @@ body {
   );
 }
 
-/* O vermelho da referência só funciona porque o entorno é vazio. A vinheta
-   escurece as bordas e faz o centro parecer iluminado sem custar uma única
-   camada de blur. */
-.hud-vignette {
-  background: radial-gradient(
-    ellipse 80% 60% at 50% 40%,
-    var(--color-void-lift) 0%,
-    var(--color-void-deep) 70%
-  );
+/* Giro e pulso do core. Ficam aqui e não no Tailwind porque precisam de
+   `transform-box: view-box` para girar em torno do centro da viewBox — o
+   utilitário de rotação padrão usa a caixa dos traços e o anel sai passeando
+   pela tela. Só transform: nada de blur, que derruba o FPS no WebView2. */
+@keyframes hud-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes hud-pulsar {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Quem pediu menos movimento fica com o estado final, não com a tela
+     tremendo em câmera lenta. */
+  [style*="hud-girar"],
+  [style*="hud-pulsar"] {
+    animation: none !important;
+  }
 }

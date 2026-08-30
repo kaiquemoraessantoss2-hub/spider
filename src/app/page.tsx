@@ -5,6 +5,7 @@ import { fetchProjects } from "@/lib/tauri";
 import { ProjectCard } from "@/components/ProjectCard";
 import { ChatPanel } from "@/components/ChatPanel";
 import { MicroLabel } from "@/components/hud/MicroLabel";
+import { ParticleField } from "@/components/hud/ParticleField";
 import { VoiceCore } from "@/components/VoiceCore";
 import { overallTone } from "@/lib/status";
 
@@ -19,7 +20,8 @@ export default function Home() {
     projects?.filter((p) => overallTone(p) !== "ok" && overallTone(p) !== "neutral").length ?? 0;
 
   return (
-    <main className="hud-vignette flex min-h-screen flex-col">
+    <main className="relative z-10 flex min-h-screen flex-col">
+      <ParticleField />
       <header className="flex items-center justify-between border-b border-line px-6 py-3">
         <div className="flex items-baseline gap-4">
           <span className="font-display text-sm font-semibold tracking-[0.42em] text-ink">
@@ -42,8 +44,8 @@ export default function Home() {
         </MicroLabel>
       </header>
 
-      <div className="grid flex-1 grid-cols-1 gap-px overflow-hidden bg-line min-[1100px]:grid-cols-[360px_1fr_380px]">
-        <aside className="overflow-y-auto bg-void-deep p-4">
+      <div className="grid flex-1 grid-cols-1 gap-px overflow-hidden bg-line/60 min-[1100px]:grid-cols-[360px_1fr_380px]">
+        <aside className="overflow-y-auto bg-void-deep/70 p-4 backdrop-blur-[1px]">
           <div className="mb-3">
             <MicroLabel tone="faint">projetos</MicroLabel>
           </div>
@@ -61,11 +63,11 @@ export default function Home() {
 
         {/* O core some abaixo de 1100px: em janela estreita ele roubaria o
             espaço de quem manda, que é o dado. */}
-        <section className="hidden items-center justify-center bg-void-deep min-[1100px]:flex">
+        <section className="hidden items-center justify-center min-[1100px]:flex">
           <VoiceCore />
         </section>
 
-        <aside className="flex flex-col overflow-hidden bg-void-deep">
+        <aside className="flex flex-col overflow-hidden bg-void-deep/70 backdrop-blur-[1px]">
           <ChatPanel projects={projects ?? []} />
         </aside>
       </div>
