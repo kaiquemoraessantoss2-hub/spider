@@ -100,10 +100,24 @@ export function VoiceCore({ size = 280 }: { size?: number }) {
             void terminar();
           }
         }}
-        aria-label="segure para falar"
-        className="rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-red"
+        // Alt+Tab segurando o Espaço nunca dispara keyup — sem isso a
+        // gravação fica aberta com a janela em segundo plano.
+        onBlur={() => void terminar()}
+        aria-label={aviso ? `segure para falar — ${aviso}` : "segure para falar"}
+        title={aviso ?? undefined}
+        className="relative rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-red"
       >
         <Ring level={level} state={state} size={size} />
+        {/* No core compacto do header (960–1099px) a label e o parágrafo de
+            aviso somem — sem isso uma falha de microfone não dava feedback
+            nenhum. O title/aria-label acima cobre teclado e leitor de tela;
+            este ponto cobre o feedback visual sem alterar a largura do header. */}
+        {compacto && aviso && (
+          <span
+            className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-danger"
+            aria-hidden
+          />
+        )}
       </button>
 
       {!compacto && (
