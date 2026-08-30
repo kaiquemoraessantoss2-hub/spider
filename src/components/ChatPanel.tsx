@@ -5,6 +5,7 @@ import type { ClientProject } from "@/types/project";
 import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
 import { loadSettings, type Settings } from "@/lib/settings";
 import { buildSystemPrompt } from "@/lib/context";
+import { speak } from "@/lib/voice";
 import { MicroLabel } from "@/components/hud/MicroLabel";
 import { SettingsDialog } from "@/components/SettingsDialog";
 
@@ -15,6 +16,7 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   const [erro, setErro] = useState<string | null>(null);
   const [configurando, setConfigurando] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [falar, setFalar] = useState(false);
   const fimDaLista = useRef<HTMLDivElement>(null);
 
   // loadSettings toca localStorage, que não existe no passe de servidor do
@@ -56,8 +58,10 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     ]);
 
     const controller = new AbortController();
+    let completa = "";
     try {
       for await (const pedaco of streamChat(historico, settings, controller.signal)) {
+        completa += pedaco;
         setMessages((m) => {
           const copia = [...m];
           const ultima = copia[copia.length - 1];
@@ -67,6 +71,9 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
           return copia;
         });
       }
+      // Fala uma vez só, com a resposta completa — chamar speak() a cada
+      // pedaço do streaming corta a fala no WebView2 a cada token.
+      if (falar && completa) speak(completa);
     } catch (e) {
       if (e instanceof MissingKeyError) setConfigurando(true);
       setErro(e instanceof Error ? e.message : String(e));
@@ -79,9 +86,16 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     <div className="relative flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <MicroLabel tone="ember">conversa</MicroLabel>
-        <button type="button" onClick={() => setConfigurando(true)}>
-          <MicroLabel>{settings?.model ?? "configurar"}</MicroLabel>
-        </button>
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={() => setFalar((v) => !v)} aria-pressed={falar}>
+            <MicroLabel tone={falar ? "ember" : "faint"}>
+              {falar ? "voz ligada" : "voz muda"}
+            </MicroLabel>
+          </button>
+          <button type="button" onClick={() => setConfigurando(true)}>
+            <MicroLabel>{settings?.model ?? "configurar"}</MicroLabel>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
