@@ -9,7 +9,9 @@ const SETTINGS: Settings = {
   provider: "openrouter",
   model: "modelo-de-teste",
   keys: { openrouter: "chave-fake", nvidia: "" },
-  groqKey: "",
+  asrProvider: "elevenlabs",
+  asrKeys: { openrouter: "", elevenlabs: "" },
+  asrModel: "deepgram/flux",
 };
 
 function payload(texto: string): string {

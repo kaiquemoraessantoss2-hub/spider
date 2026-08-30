@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { PROVIDERS } from "@/lib/llm";
-import { loadSettings, saveSettings, type ProviderId, type Settings } from "@/lib/settings";
+import { ASR_PROVIDERS } from "@/lib/voice";
+import {
+  loadSettings,
+  saveSettings,
+  type AsrProviderId,
+  type ProviderId,
+  type Settings,
+} from "@/lib/settings";
 import { MicroLabel } from "@/components/hud/MicroLabel";
 
 /**
@@ -87,14 +94,52 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
           </span>
         </label>
 
+        <label className="mb-3 block">
+          <MicroLabel>quem transcreve a fala</MicroLabel>
+          <select
+            value={settings.asrProvider}
+            onChange={(e) =>
+              setSettings({ ...settings, asrProvider: e.target.value as AsrProviderId })
+            }
+            className="mt-1 w-full border border-line bg-panel px-2 py-1.5 text-sm text-ink"
+          >
+            {Object.entries(ASR_PROVIDERS).map(([id, cfg]) => (
+              <option key={id} value={id}>
+                {cfg.label}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[10px] text-ink-faint">
+            {ASR_PROVIDERS[settings.asrProvider].ajuda}
+          </span>
+        </label>
+
+        {settings.asrProvider === "openrouter" && (
+          <label className="mb-3 block">
+            <MicroLabel>modelo de transcrição</MicroLabel>
+            <input
+              type="text"
+              value={settings.asrModel}
+              onChange={(e) => setSettings({ ...settings, asrModel: e.target.value })}
+              className="mt-1 w-full border border-line bg-panel px-2 py-1.5 font-mono text-xs text-ink"
+              placeholder="deepgram/flux"
+            />
+          </label>
+        )}
+
         <label className="mb-4 block">
-          <MicroLabel>key do Groq (voz)</MicroLabel>
+          <MicroLabel>key de {ASR_PROVIDERS[settings.asrProvider].label} (voz)</MicroLabel>
           <input
             type="password"
-            value={settings.groqKey}
-            onChange={(e) => setSettings({ ...settings, groqKey: e.target.value })}
+            value={settings.asrKeys[settings.asrProvider]}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                asrKeys: { ...settings.asrKeys, [settings.asrProvider]: e.target.value },
+              })
+            }
             className="mt-1 w-full border border-line bg-panel px-2 py-1.5 font-mono text-xs text-ink"
-            placeholder="gsk_..."
+            placeholder={settings.asrProvider === "elevenlabs" ? "sk_..." : "sk-or-..."}
           />
           <span className="mt-1 block text-[10px] text-ink-faint">
             usada só para transcrever sua fala

@@ -1,15 +1,27 @@
-import type { Settings } from "./settings.ts";
+import type { AsrProviderId, Settings } from "./settings.ts";
 
 export interface Recording {
   stop(): Promise<Blob>;
 }
 
 // A base da NVIDIA não expõe rota de áudio (só chat/completions) — o ASR
-// deles é Riva/gRPC, inacessível via fetch de um webview. Por isso o ASR usa
-// Groq Whisper, o fallback já previsto pelo plano, no mesmo formato
-// multipart. Ver task-9-report.md para o histórico da verificação.
-const ASR_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
-const ASR_MODEL = "whisper-large-v3-turbo";
+// deles é Riva/gRPC, inacessível via fetch de um webview. Daí a transcrição
+// ser de outro provedor, escolhido nas configurações.
+/** Rótulo de cada provedor de transcrição, para a tela de configuração. */
+export const ASR_PROVIDERS: Record<AsrProviderId, { label: string; ajuda: string }> = {
+  openrouter: {
+    label: "OpenRouter",
+    ajuda: "mesma key do chat; o id do modelo é campo livre",
+  },
+  elevenlabs: {
+    label: "ElevenLabs Scribe",
+    ajuda: "key própria; transcreve português sem precisar escolher modelo",
+  },
+};
+
+const OPENROUTER_ASR_URL = "https://openrouter.ai/api/v1/audio/transcriptions";
+const ELEVENLABS_ASR_URL = "https://api.elevenlabs.io/v1/speech-to-text";
+const ELEVENLABS_MODEL = "scribe_v1";
 
 /** Nome do CustomEvent que carrega o texto transcrito até o ChatPanel. */
 export const TRANSCRIPT_EVENT = "spider:transcript";
@@ -100,20 +112,42 @@ export async function startRecording(onLevel: (level: number) => void): Promise<
 }
 
 export async function transcribe(audio: Blob, settings: Settings): Promise<string> {
-  const key = settings.groqKey;
-  if (!key) throw new Error("configure a key do Groq para usar a voz");
+  const provedor = settings.asrProvider;
+  const key = settings.asrKeys[provedor];
+  if (!key) {
+    throw new Error(`configure a key de ${ASR_PROVIDERS[provedor].label} para usar a voz`);
+  }
 
   const form = new FormData();
   form.append("file", audio, "fala.webm");
-  form.append("model", ASR_MODEL);
 
-  const resposta = await fetch(ASR_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body: form,
-  });
+  let url: string;
+  let headers: Record<string, string>;
 
-  if (!resposta.ok) throw new Error(`transcrição falhou (${resposta.status})`);
+  if (provedor === "elevenlabs") {
+    url = ELEVENLABS_ASR_URL;
+    // A ElevenLabs autentica por header próprio, não por Bearer.
+    headers = { "xi-api-key": key };
+    form.append("model_id", ELEVENLABS_MODEL);
+    // ISO-639-3. Dizer o idioma poupa a etapa de detecção e erra menos em
+    // áudio curto, que é o caso de uso aqui (um comando de poucos segundos).
+    form.append("language_code", "por");
+  } else {
+    url = OPENROUTER_ASR_URL;
+    headers = { Authorization: `Bearer ${key}` };
+    form.append("model", settings.asrModel);
+  }
+
+  const resposta = await fetch(url, { method: "POST", headers, body: form });
+
+  if (!resposta.ok) {
+    // O corpo do erro costuma dizer o que o provedor não aceitou (modelo
+    // inexistente, cota estourada). Sem ele, o usuário só vê um número.
+    const detalhe = await resposta.text().catch(() => "");
+    throw new Error(
+      `transcrição falhou (${resposta.status})${detalhe ? `: ${detalhe.slice(0, 200)}` : ""}`,
+    );
+  }
 
   const { text } = (await resposta.json()) as { text?: string };
   return text?.trim() ?? "";
@@ -122,12 +156,32 @@ export async function transcribe(audio: Blob, settings: Settings): Promise<strin
 /** TTS nativa do WebView2 — nenhuma dependência, nenhuma chamada de rede. */
 export function speak(texto: string): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
+  const sintetizador = window.speechSynthesis;
+  sintetizador.cancel();
+
   const fala = new SpeechSynthesisUtterance(texto);
   fala.lang = "pt-BR";
-  const vozPtBr = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("pt"));
-  if (vozPtBr) fala.voice = vozPtBr;
-  window.speechSynthesis.speak(fala);
+
+  let jaFalou = false;
+  const falar = () => {
+    if (jaFalou) return;
+    jaFalou = true;
+    const voz = sintetizador.getVoices().find((v) => v.lang.startsWith("pt"));
+    if (voz) fala.voice = voz;
+    sintetizador.speak(fala);
+  };
+
+  // `getVoices()` devolve lista vazia na primeira chamada da página — as vozes
+  // carregam de forma assíncrona e só então `voiceschanged` dispara. Falar
+  // nesse instante deixaria `voice` nulo e leria português com a voz padrão do
+  // sistema, que aqui é en-US. O timer é a rede de segurança: se o evento não
+  // vier, falamos mesmo assim em vez de ficar mudos para sempre.
+  if (sintetizador.getVoices().length === 0) {
+    sintetizador.addEventListener("voiceschanged", falar, { once: true });
+    setTimeout(falar, 250);
+  } else {
+    falar();
+  }
 }
 
 /** Interrompe qualquer fala em andamento — o componente não fala com a API do navegador direto. */
