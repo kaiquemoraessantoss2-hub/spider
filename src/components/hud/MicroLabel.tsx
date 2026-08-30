@@ -11,7 +11,7 @@ export function MicroLabel({
   tone?: "muted" | "ember" | "faint";
 }) {
   const color =
-    tone === "ember" ? "text-red" : tone === "faint" ? "text-ink-faint" : "text-ink-muted";
+    tone === "ember" ? "text-ember" : tone === "faint" ? "text-ink-faint" : "text-ink-muted";
 
   return (
     <span
