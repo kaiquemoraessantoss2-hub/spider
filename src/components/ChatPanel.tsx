@@ -5,7 +5,7 @@ import type { ClientProject } from "@/types/project";
 import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
 import { loadSettings, type Settings } from "@/lib/settings";
 import { buildSystemPrompt } from "@/lib/context";
-import { speak } from "@/lib/voice";
+import { speak, calar, TRANSCRIPT_EVENT } from "@/lib/voice";
 import { MicroLabel } from "@/components/hud/MicroLabel";
 import { SettingsDialog } from "@/components/SettingsDialog";
 
@@ -18,6 +18,9 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [falar, setFalar] = useState(false);
   const fimDaLista = useRef<HTMLDivElement>(null);
+  // Guarda o controller do stream em curso pra "nova conversa" (M8) e o
+  // timeout (I1) conseguirem alcançá-lo de fora de enviar().
+  const controllerRef = useRef<AbortController | null>(null);
 
   // loadSettings toca localStorage, que não existe no passe de servidor do
   // export estático — por isso só depois da montagem.
@@ -33,9 +36,20 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
       const texto = (e as CustomEvent<string>).detail;
       if (texto) setInput((atual) => (atual ? `${atual} ${texto}` : texto));
     }
-    window.addEventListener("spider:transcript", receber);
-    return () => window.removeEventListener("spider:transcript", receber);
+    window.addEventListener(TRANSCRIPT_EVENT, receber);
+    return () => window.removeEventListener(TRANSCRIPT_EVENT, receber);
   }, []);
+
+  function novaConversa() {
+    // As três coisas que "limpar a conversa" precisa fazer de verdade:
+    // parar o stream em curso, calar a fala e zerar o histórico — sem isso
+    // o histórico reenviado a cada turno só cresce (contexto do modelo
+    // gratuito estoura) e a fala não tem como ser interrompida.
+    controllerRef.current?.abort();
+    calar();
+    setMessages([]);
+    setErro(null);
+  }
 
   async function enviar() {
     const pergunta = input.trim();
@@ -58,6 +72,7 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     ]);
 
     const controller = new AbortController();
+    controllerRef.current = controller;
     let completa = "";
     try {
       for await (const pedaco of streamChat(historico, settings, controller.signal)) {
@@ -75,19 +90,40 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
       // pedaço do streaming corta a fala no WebView2 a cada token.
       if (falar && completa) speak(completa);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") {
+        // Cancelamento intencional ("nova conversa") — não é erro pra mostrar.
+        return;
+      }
       if (e instanceof MissingKeyError) setConfigurando(true);
-      setErro(e instanceof Error ? e.message : String(e));
+      const semResposta = e instanceof DOMException && e.name === "TimeoutError";
+      setErro(semResposta ? "sem resposta do servidor — tente de novo" : e instanceof Error ? e.message : String(e));
     } finally {
       setStreaming(false);
+      controllerRef.current = null;
     }
   }
 
   return (
     <div className="relative flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <MicroLabel tone="ember">conversa</MicroLabel>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => setFalar((v) => !v)} aria-pressed={falar}>
+          <MicroLabel tone="ember">conversa</MicroLabel>
+          <button type="button" onClick={novaConversa}>
+            <MicroLabel tone="faint">nova conversa</MicroLabel>
+          </button>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() =>
+              setFalar((v) => {
+                const ligar = !v;
+                if (!ligar) calar();
+                return ligar;
+              })
+            }
+            aria-pressed={falar}
+          >
             <MicroLabel tone={falar ? "ember" : "faint"}>
               {falar ? "voz ligada" : "voz muda"}
             </MicroLabel>
@@ -109,7 +145,10 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
             <MicroLabel tone={m.role === "user" ? "faint" : "ember"}>
               {m.role === "user" ? "você" : "spider"}
             </MicroLabel>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink">
+            <p
+              className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink"
+              aria-live={m.role === "assistant" ? "polite" : undefined}
+            >
               {m.content}
               {streaming && i === messages.length - 1 && (
                 <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-red align-middle" />
@@ -140,7 +179,9 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
       {configurando && (
         <SettingsDialog
           onClose={(s) => {
-            setSettings(s);
+            // Cancelamento (Esc/backdrop/botão cancelar) chama onClose() sem
+            // argumento — não pode propagar alteração nenhuma nas settings.
+            if (s) setSettings(s);
             setConfigurando(false);
           }}
         />
