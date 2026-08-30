@@ -11,6 +11,9 @@ export interface Recording {
 const ASR_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const ASR_MODEL = "whisper-large-v3-turbo";
 
+/** Nome do CustomEvent que carrega o texto transcrito até o ChatPanel. */
+export const TRANSCRIPT_EVENT = "spider:transcript";
+
 /**
  * Grava do microfone e reporta o nível de volume em tempo real (0..1) — é
  * isso que faz o anel do core respirar enquanto se fala.
@@ -46,21 +49,42 @@ export async function startRecording(onLevel: (level: number) => void): Promise<
     }
     medir();
 
+    // Limpeza idempotente (guardada por `rodando`) — precisa rodar em toda
+    // saída possível: onstop normal, onerror do recorder, e o caminho em que
+    // o recorder já está inativo quando stop() é chamado.
+    function liberar() {
+      if (!rodando) return;
+      rodando = false;
+      onLevel(0);
+      stream.getTracks().forEach((t) => t.stop());
+      void contexto.close();
+    }
+
     const gravador = new MediaRecorder(stream, { mimeType: "audio/webm" });
     const pedacos: Blob[] = [];
     gravador.ondataavailable = (e) => {
       if (e.data.size > 0) pedacos.push(e.data);
     };
+    // Sem isso, um erro do recorder (dispositivo trocado/desconectado no meio
+    // da gravação) deixa a stream aberta e o AudioContext nunca fecha.
+    gravador.onerror = () => liberar();
     gravador.start();
 
     return {
       stop() {
         return new Promise<Blob>((resolve) => {
+          // O Chromium inativa o recorder sozinho quando as tracks terminam
+          // (fone desconectado, troca de dispositivo padrão do Windows). O
+          // onstop automático disparou sem ninguém escutando — chamar
+          // stop() de novo aqui lançaria InvalidStateError em vez de gerar
+          // outro evento. Resolve direto com o que já foi gravado.
+          if (gravador.state === "inactive") {
+            liberar();
+            resolve(new Blob(pedacos, { type: "audio/webm" }));
+            return;
+          }
           gravador.onstop = () => {
-            rodando = false;
-            onLevel(0);
-            stream.getTracks().forEach((t) => t.stop());
-            void contexto.close();
+            liberar();
             resolve(new Blob(pedacos, { type: "audio/webm" }));
           };
           gravador.stop();
@@ -104,4 +128,10 @@ export function speak(texto: string): void {
   const vozPtBr = window.speechSynthesis.getVoices().find((v) => v.lang.startsWith("pt"));
   if (vozPtBr) fala.voice = vozPtBr;
   window.speechSynthesis.speak(fala);
+}
+
+/** Interrompe qualquer fala em andamento — o componente não fala com a API do navegador direto. */
+export function calar(): void {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  window.speechSynthesis.cancel();
 }
