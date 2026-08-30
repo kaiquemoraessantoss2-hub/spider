@@ -26,7 +26,7 @@ pediu, e a interface atual não é a que ele quer.
 | Papel do chat | Conversar sobre os projetos, **sem executar ações** | Zero risco de estragar repositório. O modelo lê estado e responde. |
 | Backend LLM | OpenRouter + NVIDIA NIM, modelos gratuitos | Ambos são OpenAI-compatible: um cliente só, `baseUrl` trocável. |
 | Onde a API é chamada | Frontend (webview), key em `localStorage` | App single-user local com key free-tier. Proxy em Rust dobra o código sem ganho proporcional. Migração futura toca só `lib/llm.ts`. |
-| Voz | STT via ASR da NIM + TTS nativa do Windows | WebView2 não tem `SpeechRecognition`; `speechSynthesis` ele tem. |
+| Voz | STT via Groq Whisper + TTS nativa do Windows | WebView2 não tem `SpeechRecognition`; `speechSynthesis` ele tem. Groq era o fallback já previsto — a base da NIM não expõe rota de áudio por fetch (ver seção Voz). |
 | Layout | Três colunas: cards · core · chat | Reconcilia "chat lateral fixo" com "core central grande" da referência. |
 | Tipografia | Saira (display/labels), Inter (corpo), Plex Mono (só dado técnico) | Resolve a queixa de "mono em tudo" sem perder densidade técnica. |
 
@@ -63,7 +63,7 @@ o layout vira duas colunas (cards · chat). Janela mínima já configurada:
 
 ```
 src/lib/llm.ts          → cliente OpenAI-compatible (OpenRouter | NIM)
-src/lib/voice.ts        → MediaRecorder → ASR NIM; speechSynthesis
+src/lib/voice.ts        → MediaRecorder → Groq Whisper (ASR); speechSynthesis
 src/lib/settings.ts     → keys + provider + modelo em localStorage
 src/components/hud/     → Ring, CornerFrame, MicroLabel, Hairline
 src/components/ChatPanel.tsx
@@ -87,15 +87,18 @@ Streaming via SSE com `fetch` + `ReadableStream`.
 
 ### Voz
 
-- **Ouvir**: `MediaRecorder` grava webm/opus, POST para o endpoint ASR da
-  NIM, texto cai no input. Push-to-talk (segura, fala, solta) — sem wake
-  word, sem escuta contínua.
+- **Ouvir**: `MediaRecorder` grava webm/opus, POST para a Groq Whisper API
+  (`whisper-large-v3-turbo`), texto cai no input. Push-to-talk (segura, fala,
+  solta) — sem wake word, sem escuta contínua.
 - **Falar**: `speechSynthesis` do WebView2 com voz pt-BR do Windows.
 
-**A verificar antes de codar:** o nome e o formato exatos do endpoint ASR
-da NVIDIA (modelos parakeet/canary) — se aceita upload de arquivo direto ou
-exige gRPC/Riva. Se exigir Riva, o STT muda de fornecedor, não de desenho: a
-interface de `lib/voice.ts` continua `blob -> texto`.
+**Verificado durante a implementação — troca de fornecedor:** a base da
+NVIDIA NIM só expõe `/chat/completions`; toda rota de áudio (os modelos
+parakeet/canary, servidos via Riva/gRPC) devolve 404 quando chamada por
+fetch de um webview, que não fala gRPC. O STT foi para o Groq Whisper, o
+fallback que este plano já previa para esse cenário. A troca ficou
+inteiramente contida em `lib/voice.ts` — a interface continua
+`blob -> texto`, nenhum outro arquivo mudou por causa disso.
 
 **Risco conhecido:** o WebView2 exige que o app trate o pedido de permissão
 de microfone, e o Tauri v2 não faz isso sozinho em toda versão. Se
