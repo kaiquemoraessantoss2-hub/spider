@@ -96,7 +96,7 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
       }
       if (e instanceof MissingKeyError) setConfigurando(true);
       const semResposta = e instanceof DOMException && e.name === "TimeoutError";
-      setErro(semResposta ? "sem resposta do servidor — tente de novo" : e instanceof Error ? e.message : String(e));
+      setErro(semResposta ? "o servidor parou de responder — tente de novo" : e instanceof Error ? e.message : String(e));
     } finally {
       setStreaming(false);
       controllerRef.current = null;
