@@ -1,17 +1,36 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PROVIDERS } from "@/lib/llm";
 import { loadSettings, saveSettings, type ProviderId, type Settings } from "@/lib/settings";
 import { MicroLabel } from "@/components/hud/MicroLabel";
 
-export function SettingsDialog({ onClose }: { onClose: (s: Settings) => void }) {
+/**
+ * `onClose` recebe as Settings novas só quando o usuário salva. Cancelar
+ * (Esc, clique fora, botão cancelar) chama onClose() sem argumento — não
+ * pode propagar alteração nenhuma no que já estava salvo.
+ */
+export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void }) {
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const provider = PROVIDERS[settings.provider];
 
+  useEffect(() => {
+    function aoTeclar(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [onClose]);
+
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-void-deep/90 p-4">
-      <div className="hud-frame w-full max-w-sm p-4">
+    <div
+      className="absolute inset-0 z-10 flex items-center justify-center bg-void-deep/90 p-4"
+      onClick={(e) => {
+        // Só fecha se o clique foi no backdrop, não em algo dentro do painel.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div role="dialog" aria-modal="true" aria-label="configuração" className="hud-frame w-full max-w-sm p-4">
         <div className="mb-4">
           <MicroLabel tone="ember">configuração</MicroLabel>
         </div>
@@ -82,16 +101,25 @@ export function SettingsDialog({ onClose }: { onClose: (s: Settings) => void }) 
           </span>
         </label>
 
-        <button
-          type="button"
-          onClick={() => {
-            saveSettings(settings);
-            onClose(settings);
-          }}
-          className="w-full border border-red px-3 py-1.5 font-display text-[10px] uppercase tracking-[0.25em] text-red hover:bg-red hover:text-void-deep"
-        >
-          salvar
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => onClose()}
+            className="flex-1 border border-line px-3 py-1.5 font-display text-[10px] uppercase tracking-[0.25em] text-ink-muted hover:border-ink-muted"
+          >
+            cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              saveSettings(settings);
+              onClose(settings);
+            }}
+            className="flex-1 border border-red px-3 py-1.5 font-display text-[10px] uppercase tracking-[0.25em] text-red hover:bg-red hover:text-void-deep"
+          >
+            salvar
+          </button>
+        </div>
       </div>
     </div>
   );
