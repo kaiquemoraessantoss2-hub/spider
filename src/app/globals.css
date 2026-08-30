@@ -26,6 +26,7 @@
   --color-red-glow: #e8352f33;
 
   --color-ember: #ff3b30;
+  --color-void-lift: #0e0e11;
 
   --color-ink: #ededec;
   --color-ink-muted: #6b6b70;
@@ -98,7 +99,7 @@ body {
 .hud-vignette {
   background: radial-gradient(
     ellipse 80% 60% at 50% 40%,
-    #0e0e11 0%,
+    var(--color-void-lift) 0%,
     var(--color-void-deep) 70%
   );
 }
