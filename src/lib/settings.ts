@@ -15,6 +15,9 @@ export interface Settings {
   asrProvider: AsrProviderId;
   /** Uma key por provedor de transcrição, pela mesma razão das de chat. */
   asrKeys: Record<AsrProviderId, string>;
+  /** Pasta que contém uma subpasta por cliente. Escolhida pelo seletor
+   *  nativo do sistema; vazia significa cair na variável de ambiente. */
+  projectsRoot: string;
   /** Id do modelo de transcrição no OpenRouter. Campo livre: o catálogo de
    *  STT só aparece filtrando `?output_modalities=transcription`, então
    *  sugerimos alguns e deixamos o resto por conta de quem quiser trocar. */
@@ -30,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   asrProvider: "elevenlabs",
   asrKeys: { openrouter: "", elevenlabs: "" },
   asrModel: "openai/whisper-large-v3-turbo",
+  projectsRoot: "",
 };
 
 /** JSON.parse não garante que o valor bata com o enum — localStorage pode
@@ -71,6 +75,7 @@ export function loadSettings(): Settings {
       // "deepgram/flux" foi um padrão errado de uma versão anterior: é modelo
       // de SÍNTESE de fala, e a rota de transcrição responde 400 com ele.
       // Quem já salvou esse valor volta pro padrão em vez de ficar quebrado.
+      projectsRoot: parsed.projectsRoot ?? DEFAULT_SETTINGS.projectsRoot,
       asrModel:
         !parsed.asrModel || parsed.asrModel === "deepgram/flux"
           ? DEFAULT_SETTINGS.asrModel
@@ -90,5 +95,48 @@ export function saveSettings(settings: Settings): void {
   } catch {
     // Sem espaço ou storage bloqueado: a sessão atual continua funcionando
     // com o valor em memória.
+  }
+}
+
+const CONVERSA_KEY = "spider.conversa.v1";
+/** Teto de mensagens guardadas. O histórico inteiro é reenviado a cada turno,
+ *  então deixá-lo crescer sem limite estoura o contexto dos modelos gratuitos
+ *  antes de encher o localStorage. */
+const MAX_MENSAGENS = 40;
+
+export interface MensagemSalva {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+export function carregarConversa(): MensagemSalva[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CONVERSA_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (m): m is MensagemSalva =>
+        typeof m === "object" &&
+        m !== null &&
+        typeof (m as MensagemSalva).content === "string" &&
+        ["system", "user", "assistant"].includes((m as MensagemSalva).role),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function salvarConversa(mensagens: MensagemSalva[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      CONVERSA_KEY,
+      JSON.stringify(mensagens.slice(-MAX_MENSAGENS)),
+    );
+  } catch {
+    // Cota estourada ou storage bloqueado: perder o histórico é melhor do
+    // que derrubar a conversa em andamento.
   }
 }

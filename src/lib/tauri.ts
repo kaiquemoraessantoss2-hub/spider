@@ -68,7 +68,8 @@ export async function fetchProjects(): Promise<ClientProject[]> {
   }
 
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<ClientProject[]>("list_projects");
+  const { loadSettings } = await import("@/lib/settings");
+  return invoke<ClientProject[]>("list_projects", { root: loadSettings().projectsRoot });
 }
 
 /**
@@ -86,4 +87,16 @@ export async function openInOrca(project: ClientProject): Promise<void> {
 
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke("open_in_orca", { projectId: project.id, path: project.path });
+}
+
+/**
+ * Abre o seletor de pasta nativo do sistema. Fora do Tauri não existe API de
+ * navegador que devolva um caminho de disco — daí o retorno nulo, que a tela
+ * trata mostrando que só funciona no app.
+ */
+export async function escolherPastaDeProjetos(): Promise<string | null> {
+  if (!inTauri()) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const escolhido = await open({ directory: true, multiple: false });
+  return typeof escolhido === "string" ? escolhido : null;
 }

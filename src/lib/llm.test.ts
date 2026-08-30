@@ -11,7 +11,8 @@ const SETTINGS: Settings = {
   keys: { openrouter: "chave-fake", nvidia: "" },
   asrProvider: "elevenlabs",
   asrKeys: { openrouter: "", elevenlabs: "" },
-  asrModel: "deepgram/flux",
+  asrModel: "openai/whisper-large-v3-turbo",
+  projectsRoot: "",
 };
 
 function payload(texto: string): string {

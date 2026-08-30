@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PROVIDERS, listarModelosGratuitos } from "@/lib/llm";
 import { ASR_PROVIDERS, OPENROUTER_ASR_MODELS } from "@/lib/voice";
 import { testarTudo, type Diagnostico } from "@/lib/diagnostics";
+import { escolherPastaDeProjetos } from "@/lib/tauri";
 import {
   loadSettings,
   saveSettings,
@@ -136,6 +137,24 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
             guardada em texto puro no perfil desta máquina
           </span>
         </label>
+
+        <div className="mb-4 block">
+          <MicroLabel>pasta dos projetos</MicroLabel>
+          <button
+            type="button"
+            onClick={async () => {
+              const pasta = await escolherPastaDeProjetos();
+              if (pasta) setSettings({ ...settings, projectsRoot: pasta });
+            }}
+            className="mt-1 w-full truncate border border-line bg-panel px-2 py-1.5 text-left font-mono text-xs text-ink hover:border-red"
+            title={settings.projectsRoot || undefined}
+          >
+            {settings.projectsRoot || "escolher pasta…"}
+          </button>
+          <span className="mt-1 block text-[10px] text-ink-faint">
+            uma subpasta por cliente — o seletor nativo só abre dentro do app
+          </span>
+        </div>
 
         <label className="mb-3 block">
           <MicroLabel>quem transcreve a fala</MicroLabel>

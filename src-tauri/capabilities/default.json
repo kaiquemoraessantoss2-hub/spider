@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Capabilities for the main Spider window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:allow-open"]
 }

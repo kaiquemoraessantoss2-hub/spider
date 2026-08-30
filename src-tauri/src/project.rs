@@ -29,14 +29,16 @@ struct ProjectOverride {
     brand: Option<String>,
 }
 
-fn projects_root() -> Result<PathBuf, String> {
+/// A pasta escolhida na tela manda; a variável de ambiente continua valendo
+/// como alternativa para quem já a configurou antes de existir o seletor.
+fn projects_root(root: Option<String>) -> Result<PathBuf, String> {
+    if let Some(caminho) = root.filter(|c| !c.trim().is_empty()) {
+        return Ok(PathBuf::from(caminho));
+    }
+
     env::var("SPIDER_PROJECTS_ROOT")
         .map(PathBuf::from)
-        .map_err(|_| {
-            "defina a variável de ambiente SPIDER_PROJECTS_ROOT apontando para a pasta \
-             que contém as pastas de cada cliente"
-                .to_string()
-        })
+        .map_err(|_| "escolha a pasta dos projetos nas configurações do Spider".to_string())
 }
 
 fn folder_name_to_display(name: &str) -> String {
@@ -61,8 +63,8 @@ fn read_override(dir: &Path) -> ProjectOverride {
         .unwrap_or_default()
 }
 
-pub fn list() -> Result<Vec<ClientProject>, String> {
-    let root = projects_root()?;
+pub fn list(root: Option<String>) -> Result<Vec<ClientProject>, String> {
+    let root = projects_root(root)?;
 
     let entries = fs::read_dir(&root)
         .map_err(|e| format!("não consegui ler {}: {e}", root.display()))?;

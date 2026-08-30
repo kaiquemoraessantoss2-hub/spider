@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientProject } from "@/types/project";
 import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
-import { loadSettings, type Settings } from "@/lib/settings";
+import { loadSettings, carregarConversa, salvarConversa, type Settings } from "@/lib/settings";
 import { buildSystemPrompt } from "@/lib/context";
 import { speak, calar, TRANSCRIPT_EVENT } from "@/lib/voice";
 import { MicroLabel } from "@/components/hud/MicroLabel";
@@ -11,6 +11,8 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 
 export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Só depois da montagem: o passe estático do Next não tem localStorage.
+  const [historicoCarregado, setHistoricoCarregado] = useState(false);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -25,6 +27,18 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   // loadSettings toca localStorage, que não existe no passe de servidor do
   // export estático — por isso só depois da montagem.
   useEffect(() => setSettings(loadSettings()), []);
+
+  useEffect(() => {
+    setMessages(carregarConversa());
+    setHistoricoCarregado(true);
+  }, []);
+
+  // Grava a cada mudança, inclusive durante o streaming — fechar o app no
+  // meio de uma resposta preserva o que já tinha chegado. A guarda evita
+  // que o estado vazio do primeiro render apague o histórico salvo.
+  useEffect(() => {
+    if (historicoCarregado) salvarConversa(messages);
+  }, [messages, historicoCarregado]);
 
   useEffect(() => {
     fimDaLista.current?.scrollIntoView({ behavior: "smooth" });
