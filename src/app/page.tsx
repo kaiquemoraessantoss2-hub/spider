@@ -27,6 +27,14 @@ export default function Home() {
           </span>
           <MicroLabel tone="ember">inteligência operacional</MicroLabel>
         </div>
+
+        {/* Abaixo de 1100px o core central some (ver seção mais abaixo) —
+            aqui ele reaparece pequeno, sem roubar o espaço do dado. Mesmo
+            componente, prop de tamanho: nunca os dois ativos ao mesmo tempo. */}
+        <div className="flex min-[1100px]:hidden">
+          <VoiceCore size={40} />
+        </div>
+
         <MicroLabel>
           {isLoading
             ? "sincronizando"

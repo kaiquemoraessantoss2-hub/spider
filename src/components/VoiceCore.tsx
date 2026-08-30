@@ -3,10 +3,13 @@
 import { useRef, useState } from "react";
 import { Ring, type RingState } from "@/components/hud/Ring";
 import { MicroLabel } from "@/components/hud/MicroLabel";
-import { startRecording, transcribe, type Recording } from "@/lib/voice";
+import { startRecording, transcribe, TRANSCRIPT_EVENT, type Recording } from "@/lib/voice";
 import { loadSettings } from "@/lib/settings";
 
-export function VoiceCore() {
+export function VoiceCore({ size = 280 }: { size?: number }) {
+  // Abaixo de 1100px o core reaparece pequeno no header (I3): sem espaço
+  // pra label nem aviso, só o anel — o botão continua com aria-label.
+  const compacto = size < 100;
   const [level, setLevel] = useState(0);
   const [state, setState] = useState<RingState>("idle");
   const [aviso, setAviso] = useState<string | null>(null);
@@ -54,7 +57,7 @@ export function VoiceCore() {
       const audio = await gravador.stop(); // libera o microfone e fecha o AudioContext deste ciclo, sempre
       const texto = await transcribe(audio, loadSettings());
       if (texto) {
-        window.dispatchEvent(new CustomEvent("spider:transcript", { detail: texto }));
+        window.dispatchEvent(new CustomEvent(TRANSCRIPT_EVENT, { detail: texto }));
       } else {
         setAviso("não entendi");
       }
@@ -76,28 +79,46 @@ export function VoiceCore() {
   }
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className={compacto ? "flex items-center" : "flex flex-col items-center gap-4"}>
       <button
         type="button"
         onPointerDown={() => void comecar()}
         onPointerUp={() => void terminar()}
         onPointerLeave={() => void terminar()}
         onPointerCancel={() => void terminar()}
+        onKeyDown={(e) => {
+          // event.repeat dispara em rajada enquanto a tecla fica pressionada
+          // — sem a guarda, cada repetição tentaria abrir uma nova gravação.
+          if ((e.key === " " || e.key === "Enter") && !e.repeat) {
+            e.preventDefault();
+            void comecar();
+          }
+        }}
+        onKeyUp={(e) => {
+          if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            void terminar();
+          }
+        }}
         aria-label="segure para falar"
         className="rounded-full focus:outline-none focus-visible:ring-1 focus-visible:ring-red"
       >
-        <Ring level={level} state={state} size={280} />
+        <Ring level={level} state={state} size={size} />
       </button>
 
-      <MicroLabel tone={state === "idle" ? "faint" : "ember"}>
-        {state === "listening"
-          ? "ouvindo"
-          : state === "thinking"
-            ? "transcrevendo"
-            : "segure para falar"}
-      </MicroLabel>
+      {!compacto && (
+        <MicroLabel tone={state === "idle" ? "faint" : "ember"}>
+          {state === "listening"
+            ? "ouvindo"
+            : state === "thinking"
+              ? "transcrevendo"
+              : "segure para falar"}
+        </MicroLabel>
+      )}
 
-      {aviso && <p className="max-w-[240px] text-center text-xs text-danger">{aviso}</p>}
+      {!compacto && aviso && (
+        <p className="max-w-[240px] text-center text-xs text-danger">{aviso}</p>
+      )}
     </div>
   );
 }
