@@ -3,7 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientProject } from "@/types/project";
 import { streamChat, MissingKeyError, type ChatMessage } from "@/lib/llm";
-import { loadSettings, carregarConversa, salvarConversa, type Settings } from "@/lib/settings";
+import { loadSettings, type Settings } from "@/lib/settings";
+import {
+  listarConversas,
+  carregarConversa,
+  salvarConversa,
+  apagarConversa,
+  idAtual,
+  definirAtual,
+  novoId,
+  type Conversa,
+} from "@/lib/conversas";
 import { buildSystemPrompt } from "@/lib/context";
 import { speak, calar, TRANSCRIPT_EVENT } from "@/lib/voice";
 import { MicroLabel } from "@/components/hud/MicroLabel";
@@ -13,6 +23,8 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   // Só depois da montagem: o passe estático do Next não tem localStorage.
   const [historicoCarregado, setHistoricoCarregado] = useState(false);
+  const [conversas, setConversas] = useState<Conversa[]>([]);
+  const [conversaId, setConversaId] = useState<string>("");
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -29,7 +41,14 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   useEffect(() => setSettings(loadSettings()), []);
 
   useEffect(() => {
-    setMessages(carregarConversa());
+    const lista = listarConversas();
+    // Reabre onde parou: a última em uso, ou a mais recente. Só cria conversa
+    // nova quando não há nenhuma — abrir o app não pode gerar conversa vazia.
+    const salvo = idAtual();
+    const id = (salvo && lista.some((c) => c.id === salvo) ? salvo : lista[0]?.id) ?? novoId();
+    setConversas(lista);
+    setConversaId(id);
+    setMessages(carregarConversa(id));
     setHistoricoCarregado(true);
   }, []);
 
@@ -37,8 +56,11 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   // meio de uma resposta preserva o que já tinha chegado. A guarda evita
   // que o estado vazio do primeiro render apague o histórico salvo.
   useEffect(() => {
-    if (historicoCarregado) salvarConversa(messages);
-  }, [messages, historicoCarregado]);
+    if (!historicoCarregado || !conversaId) return;
+    salvarConversa(conversaId, messages);
+    definirAtual(conversaId);
+    setConversas(listarConversas());
+  }, [messages, historicoCarregado, conversaId]);
 
   useEffect(() => {
     fimDaLista.current?.scrollIntoView({ behavior: "smooth" });
@@ -62,6 +84,26 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     return () => window.removeEventListener(TRANSCRIPT_EVENT, receber);
   }, []);
 
+  function trocarConversa(id: string) {
+    controllerRef.current?.abort();
+    calar();
+    setErro(null);
+    setConversaId(id);
+    setMessages(carregarConversa(id));
+  }
+
+  function apagarAtual() {
+    controllerRef.current?.abort();
+    calar();
+    apagarConversa(conversaId);
+    const restantes = listarConversas();
+    setConversas(restantes);
+    const proxima = restantes[0]?.id ?? novoId();
+    setConversaId(proxima);
+    setMessages(carregarConversa(proxima));
+    setErro(null);
+  }
+
   function novaConversa() {
     // As três coisas que "limpar a conversa" precisa fazer de verdade:
     // parar o stream em curso, calar a fala e zerar o histórico — sem isso
@@ -69,6 +111,10 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
     // gratuito estoura) e a fala não tem como ser interrompida.
     controllerRef.current?.abort();
     calar();
+    // Conversa nova não apaga a anterior: ela ganha um id próprio e a antiga
+    // continua na lista. A de antes zerava o histórico para sempre.
+    const id = novoId();
+    setConversaId(id);
     setMessages([]);
     setErro(null);
   }
@@ -137,11 +183,32 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
   return (
     <div className="relative flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
-        <div className="flex items-center gap-3">
-          <MicroLabel tone="ember">conversa</MicroLabel>
-          <button type="button" onClick={novaConversa}>
-            <MicroLabel tone="faint">nova conversa</MicroLabel>
+        <div className="flex min-w-0 items-center gap-3">
+          {/* Um select em vez de barra lateral: a coluna tem 380px, e uma
+              lista fixa comeria o espaço da conversa em si. */}
+          <select
+            value={conversaId}
+            onChange={(e) => trocarConversa(e.target.value)}
+            aria-label="conversa"
+            className="min-w-0 max-w-[150px] truncate border-none bg-transparent font-display text-[9px] uppercase tracking-[0.25em] text-red focus:outline-none"
+          >
+            {!conversas.some((c) => c.id === conversaId) && (
+              <option value={conversaId}>conversa nova</option>
+            )}
+            {conversas.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.titulo}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={novaConversa} title="começar outra conversa">
+            <MicroLabel tone="faint">nova</MicroLabel>
           </button>
+          {messages.length > 0 && (
+            <button type="button" onClick={apagarAtual} title="apagar esta conversa">
+              <MicroLabel tone="faint">apagar</MicroLabel>
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button
