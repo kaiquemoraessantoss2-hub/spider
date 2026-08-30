@@ -112,7 +112,14 @@ export function ChatPanel({ projects }: { projects: ClientProject[] }) {
       // pedaço do streaming corta a fala no WebView2 a cada token.
       // Pergunta feita por voz é respondida por voz, mesmo com o
       // interruptor desligado: quem falou não está olhando pra tela.
-      if ((falar || porVoz) && completa) speak(completa);
+      if ((falar || porVoz) && completa) {
+        const via = await speak(completa, settings);
+        // Avisar da queda importa: sem isso, a voz muda de timbre no meio do
+        // dia e o dono fica sem saber que o crédito da ElevenLabs acabou.
+        if (via === "sistema" && settings.elevenVoiceId) {
+          setErro("voz da ElevenLabs indisponível (crédito?) — falando com a voz do sistema");
+        }
+      }
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // Cancelamento intencional ("nova conversa") — não é erro pra mostrar.

@@ -15,6 +15,9 @@ export interface Settings {
   asrProvider: AsrProviderId;
   /** Uma key por provedor de transcrição, pela mesma razão das de chat. */
   asrKeys: Record<AsrProviderId, string>;
+  /** Voz da ElevenLabs usada para falar as respostas. Vazio = usa direto a
+   *  voz do sistema, sem gastar crédito. */
+  elevenVoiceId: string;
   /** Pasta que contém uma subpasta por cliente. Escolhida pelo seletor
    *  nativo do sistema; vazia significa cair na variável de ambiente. */
   projectsRoot: string;
@@ -33,6 +36,7 @@ export const DEFAULT_SETTINGS: Settings = {
   asrProvider: "elevenlabs",
   asrKeys: { openrouter: "", elevenlabs: "" },
   asrModel: "openai/whisper-large-v3-turbo",
+  elevenVoiceId: "",
   projectsRoot: "",
 };
 
@@ -75,6 +79,7 @@ export function loadSettings(): Settings {
       // "deepgram/flux" foi um padrão errado de uma versão anterior: é modelo
       // de SÍNTESE de fala, e a rota de transcrição responde 400 com ele.
       // Quem já salvou esse valor volta pro padrão em vez de ficar quebrado.
+      elevenVoiceId: parsed.elevenVoiceId ?? DEFAULT_SETTINGS.elevenVoiceId,
       projectsRoot: parsed.projectsRoot ?? DEFAULT_SETTINGS.projectsRoot,
       asrModel:
         !parsed.asrModel || parsed.asrModel === "deepgram/flux"

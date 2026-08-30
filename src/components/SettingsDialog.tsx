@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { PROVIDERS, listarModelosGratuitos } from "@/lib/llm";
-import { ASR_PROVIDERS, OPENROUTER_ASR_MODELS } from "@/lib/voice";
+import { ASR_PROVIDERS, OPENROUTER_ASR_MODELS, listarVozesElevenLabs } from "@/lib/voice";
 import { testarTudo, type Diagnostico } from "@/lib/diagnostics";
 import { escolherPastaDeProjetos } from "@/lib/tauri";
 import {
@@ -23,6 +23,7 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [diagnosticos, setDiagnosticos] = useState<Diagnostico[] | null>(null);
   const [gratuitos, setGratuitos] = useState<string[]>([]);
+  const [vozes, setVozes] = useState<{ id: string; nome: string }[]>([]);
   const [testando, setTestando] = useState(false);
 
   // Busca o catálogo vivo em vez de confiar na lista embutida: modelo
@@ -37,6 +38,22 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
       ativo = false;
     };
   }, [settings.provider]);
+
+  // Só busca quando há key: sem ela a chamada só devolveria 401.
+  useEffect(() => {
+    const key = settings.asrKeys.elevenlabs;
+    if (!key) {
+      setVozes([]);
+      return;
+    }
+    let ativo = true;
+    void listarVozesElevenLabs(key).then((v) => {
+      if (ativo) setVozes(v);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [settings.asrKeys.elevenlabs]);
 
   async function testar() {
     setTestando(true);
@@ -214,6 +231,27 @@ export function SettingsDialog({ onClose }: { onClose: (s?: Settings) => void })
           />
           <span className="mt-1 block text-[10px] text-ink-faint">
             usada só para transcrever sua fala
+          </span>
+        </label>
+
+        <label className="mb-4 block">
+          <MicroLabel>voz que fala as respostas</MicroLabel>
+          <select
+            value={settings.elevenVoiceId}
+            onChange={(e) => setSettings({ ...settings, elevenVoiceId: e.target.value })}
+            className="mt-1 w-full border border-line bg-panel px-2 py-1.5 text-sm text-ink"
+          >
+            <option value="">voz do Windows (grátis, offline)</option>
+            {vozes.map((v) => (
+              <option key={v.id} value={v.id}>
+                ElevenLabs · {v.nome}
+              </option>
+            ))}
+          </select>
+          <span className="mt-1 block text-[10px] text-ink-faint">
+            {vozes.length
+              ? "quando o crédito acabar, volta sozinho para a voz do Windows"
+              : "cole a key da ElevenLabs acima para listar as vozes da sua conta"}
           </span>
         </label>
 

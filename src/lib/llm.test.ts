@@ -12,6 +12,7 @@ const SETTINGS: Settings = {
   asrProvider: "elevenlabs",
   asrKeys: { openrouter: "", elevenlabs: "" },
   asrModel: "openai/whisper-large-v3-turbo",
+  elevenVoiceId: "",
   projectsRoot: "",
 };
 

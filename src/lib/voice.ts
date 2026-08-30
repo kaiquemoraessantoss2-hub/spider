@@ -195,8 +195,9 @@ export async function transcribe(audio: Blob, settings: Settings): Promise<strin
   return text?.trim() ?? "";
 }
 
-/** TTS nativa do WebView2 — nenhuma dependência, nenhuma chamada de rede. */
-export function speak(texto: string): void {
+/** TTS nativa do WebView2 — sem dependência, sem rede, sem cota. É o piso:
+ *  quando a nuvem falha por qualquer motivo, a resposta ainda é falada. */
+export function falarComOSistema(texto: string): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
   const sintetizador = window.speechSynthesis;
   sintetizador.cancel();
@@ -226,8 +227,76 @@ export function speak(texto: string): void {
   }
 }
 
+const ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
+/** Turbo custa metade dos créditos do multilingual v2 e fala português. */
+const ELEVENLABS_TTS_MODEL = "eleven_turbo_v2_5";
+
+let audioAtual: HTMLAudioElement | null = null;
+
+/** Vozes da conta, para o seletor das configurações. */
+export async function listarVozesElevenLabs(key: string): Promise<{ id: string; nome: string }[]> {
+  try {
+    const r = await fetch("https://api.elevenlabs.io/v1/voices", { headers: { "xi-api-key": key } });
+    if (!r.ok) return [];
+    const { voices } = (await r.json()) as { voices?: { voice_id: string; name: string }[] };
+    return (voices ?? []).map((v) => ({ id: v.voice_id, nome: v.name }));
+  } catch {
+    return [];
+  }
+}
+
+async function falarComElevenLabs(texto: string, settings: Settings): Promise<void> {
+  const key = settings.asrKeys.elevenlabs;
+  if (!key || !settings.elevenVoiceId) throw new Error("ElevenLabs não configurada");
+
+  const r = await fetch(`${ELEVENLABS_TTS_URL}/${settings.elevenVoiceId}`, {
+    method: "POST",
+    headers: { "xi-api-key": key, "Content-Type": "application/json" },
+    body: JSON.stringify({ text: texto, model_id: ELEVENLABS_TTS_MODEL }),
+  });
+
+  // Cota estourada (401/402/429) cai aqui junto com qualquer outra falha — e
+  // é exatamente o caso em que queremos a voz do sistema, não um erro.
+  if (!r.ok) throw new Error(`ElevenLabs respondeu ${r.status}`);
+
+  const url = URL.createObjectURL(await r.blob());
+  const audio = new Audio(url);
+  audioAtual = audio;
+  audio.onended = () => URL.revokeObjectURL(url);
+  await audio.play();
+}
+
+/**
+ * Fala a resposta. Tenta a ElevenLabs quando há key e voz escolhidas, e cai
+ * na voz do sistema em QUALQUER falha — cota acabada, key inválida, internet
+ * fora. Voz pior é melhor que silêncio.
+ *
+ * Devolve qual caminho falou, para a tela poder avisar que a cota acabou.
+ */
+export async function speak(texto: string, settings?: Settings): Promise<"elevenlabs" | "sistema"> {
+  calar();
+
+  if (settings?.asrKeys.elevenlabs && settings.elevenVoiceId) {
+    try {
+      await falarComElevenLabs(texto, settings);
+      return "elevenlabs";
+    } catch {
+      // cai para o sistema logo abaixo
+    }
+  }
+
+  falarComOSistema(texto);
+  return "sistema";
+}
+
 /** Interrompe qualquer fala em andamento — o componente não fala com a API do navegador direto. */
 export function calar(): void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel();
+  if (typeof window === "undefined") return;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  // A fala da nuvem toca por um <audio>, que o speechSynthesis não conhece —
+  // sem parar os dois, "calar" silenciava só metade das vozes possíveis.
+  if (audioAtual) {
+    audioAtual.pause();
+    audioAtual = null;
+  }
 }
